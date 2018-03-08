@@ -1,0 +1,76 @@
+
+image.png
+size: 512,64
+format: RGBA8888
+filter: Nearest,Nearest
+repeat: none
+arrow
+  rotate: false
+  xy: 37, 3
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+blocked
+  rotate: false
+  xy: 241, 3
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+currentFrontier
+  rotate: false
+  xy: 139, 3
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+frontier
+  rotate: false
+  xy: 275, 3
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+goal
+  rotate: false
+  xy: 309, 3
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+neighbor
+  rotate: false
+  xy: 71, 3
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+node
+  rotate: false
+  xy: 173, 3
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+path
+  rotate: false
+  xy: 1, 1
+  size: 34, 34
+  orig: 34, 34
+  offset: 0, 0
+  index: -1
+start
+  rotate: false
+  xy: 105, 3
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+visited
+  rotate: false
+  xy: 207, 3
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1

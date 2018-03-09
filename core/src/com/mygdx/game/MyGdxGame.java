@@ -48,7 +48,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
     private Skin skin;
     public BitmapFont font;
 
-    private Array<Node> nodes = new Array<Node>();
+    private GameMap map;
     private Node startNode;
     private Node goalNode;
     private Pathfinding pathfinding;
@@ -136,11 +136,12 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         batch = new SpriteBatch();
         stage = new Stage(new FitViewport(screenWidth, screenHeight));
         viewport = new FitViewport(screenWidth, screenHeight);
-        viewport.getCamera().position.set(screenWidth / 2, screenHeight / 2, 0);
+        viewport.getCamera().position.set(screenWidth / 2 - 30, screenHeight / 2 - 35, 0);
 
         Gdx.input.setInputProcessor(new InputMultiplexer(stage, this));
         Node.setGame(this);
 
+        map = new GameMap(19, 15);
 
         Table menu = new Table();
 
@@ -184,8 +185,10 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         costCheckBox.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                for (int i = 0; i < nodes.size; i++) {
-                    nodes.get(i).showCost = costCheckBox.isChecked();
+                for (int i = 0; i < map.getWidth(); i++) {
+                    for (int j = 0; j < map.getHeight(); j++) {
+                        map.getNode(i, j).showCost = costCheckBox.isChecked();
+                    }
                 }
             }
         });
@@ -195,8 +198,10 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         costSoFarCheckBox.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                for (int i = 0; i < nodes.size; i++) {
-                    nodes.get(i).showCostSoFar = costSoFarCheckBox.isChecked();
+                for (int i = 0; i < map.getWidth(); i++) {
+                    for (int j = 0; j < map.getHeight(); j++) {
+                        map.getNode(i, j).showCostSoFar = costSoFarCheckBox.isChecked();
+                    }
                 }
             }
         });
@@ -205,8 +210,10 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         heuristicCostCheckBox.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                for (int i = 0; i < nodes.size; i++) {
-                    nodes.get(i).showHeuristicCost = heuristicCostCheckBox.isChecked();
+                for (int i = 0; i < map.getWidth(); i++) {
+                    for (int j = 0; j < map.getHeight(); j++) {
+                        map.getNode(i, j).showHeuristicCost = heuristicCostCheckBox.isChecked();
+                    }
                 }
             }
         });
@@ -215,8 +222,10 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         aStarCostCheckBox.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                for (int i = 0; i < nodes.size; i++) {
-                    nodes.get(i).showAStarCost = aStarCostCheckBox.isChecked();
+                for (int i = 0; i < map.getWidth(); i++) {
+                    for (int j = 0; j < map.getHeight(); j++) {
+                        map.getNode(i, j).showAStarCost = aStarCostCheckBox.isChecked();
+                    }
                 }
             }
         });
@@ -240,8 +249,10 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         arrowCheckbox.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                for (int i = 0; i < nodes.size; i++) {
-                    nodes.get(i).showArrow = arrowCheckbox.isChecked();
+                for (int i = 0; i < map.getWidth(); i++) {
+                    for (int j = 0; j < map.getHeight(); j++) {
+                        map.getNode(i, j).showArrow = arrowCheckbox.isChecked();
+                    }
                 }
             }
         });
@@ -303,25 +314,29 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
 
         stage.addActor(menu);
 
-        pathfinding = new Pathfinding();
+        pathfinding = new Pathfinding(map);
 
-        generateNode();
-
-        startNode = nodes.get(98);
-        goalNode = nodes.get(188);
+        startNode = map.getNode(5, 10);
+        goalNode = map.getNode(15, 10);
 
         arrowCheckbox.setChecked(true);
         pathCheckbox.setChecked(true);
     }
 
     private void reset() {
-        for (int i = 0; i < nodes.size; i++) {
-            final Node node = nodes.get(i);
-            if (node.state != Node.NodeState.BLOCKED)
-                node.state = Node.NodeState.DEFAULT;
-            node.drawNeighborFrame = false;
+        for (int i = 0; i < map.getWidth(); i++) {
+            for (int j = 0; j < map.getHeight(); j++) {
+                final Node node = map.getNode(i, j);
+                if (node.state != Node.NodeState.BLOCKED)
+                    node.state = Node.NodeState.DEFAULT;
+                node.drawNeighborFrame = false;
+                node.setSearchId(-1);
+            }
         }
-        pathfinding.init();
+        map.updatNearbyNode();
+
+        pathfinding.getPath().clear();
+
         state = GameState.START;
         nextStepButton.setTouchable(Touchable.enabled);
         nextStepButton.setText("Step ถัดไป");
@@ -336,14 +351,6 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         runButton.setText("เริ่มหาเส้นทาง");
         runButton.setTouchable(Touchable.enabled);
         runButton.setStyle(skin.get(TextButton.TextButtonStyle.class));
-    }
-
-    private void generateNode() {
-        for (int i = 1; i < 20; i++) {
-            for (int j = 1; j < 16; j++) {
-                nodes.add(new Node(i, j));
-            }
-        }
     }
 
     @Override
@@ -365,11 +372,14 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         stage.act();
 
         batch.begin();
-        for (int i = 0; i < nodes.size; i++) {
-            nodes.get(i).draw(pathfinding);
+
+        for (int i = 0; i < map.getWidth(); i++) {
+            for (int j = 0; j < map.getHeight(); j++) {
+                map.getNode(i, j).draw(pathfinding);
+            }
         }
-        batch.draw(startRegion, startNode.i * 34f, startNode.j * 34f);
-        batch.draw(goalRegion, goalNode.i * 34f, goalNode.j * 34f);
+        batch.draw(startRegion, startNode.x * 34f, startNode.y * 34f);
+        batch.draw(goalRegion, goalNode.x * 34f, goalNode.y * 34f);
         if (pathCheckbox.isChecked())
             drawPath();
         batch.end();
@@ -400,7 +410,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
     private void nextStep() {
         switch (state) {
             case START:
-                pathfinding.start(startNode, goalNode, nodes);
+                pathfinding.start(startNode, goalNode);
                 state = GameState.SELECT_FRONTIER;
                 setSelectedLabel(firstStepLabel, true);
                 break;
@@ -455,6 +465,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
                     node.state = Node.NodeState.DEFAULT;
                     removeBlockedMode = true;
                 }
+                map.updatNearbyNode();
             }
         }
 
@@ -466,11 +477,15 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         if (runningMode) return false;
         Node node = findNodeFromTouch(touchX, touchY);
         if (node != null) {
-            if (addBlockedMode && (node != startNode && node != goalNode) && node.state == Node.NodeState.DEFAULT)
+            if (addBlockedMode && (node != startNode && node != goalNode) && node.state == Node.NodeState.DEFAULT) {
                 node.state = Node.NodeState.BLOCKED;
+                map.updatNearbyNode();
+            }
 
-            if (removeBlockedMode && node.state == Node.NodeState.BLOCKED)
+            if (removeBlockedMode && node.state == Node.NodeState.BLOCKED) {
                 node.state = Node.NodeState.DEFAULT;
+                map.updatNearbyNode();
+            }
 
             if (setStartMode && node != goalNode && node.state != Node.NodeState.BLOCKED)
                 startNode = node;
@@ -496,43 +511,48 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         int x = (int) (position.x / 34f);
         int y = (int) (position.y / 34f);
         Pools.free(position);
-        for (int i = 0; i < nodes.size; i++) {
-            Node node = nodes.get(i);
-            if (node.i == x && node.j == y)
-                return node;
+        for (int i = 0; i < map.getWidth(); i++) {
+            for (int j = 0; j < map.getHeight(); j++) {
+                Node node = map.getNode(i, j);
+                if (node.x == x && node.y == y)
+                    return node;
+            }
         }
         return null;
     }
 
     private void clearBlocked() {
-        for (int i = 0; i < nodes.size; i++) {
-            Node node = nodes.get(i);
-            if (node.state == Node.NodeState.BLOCKED)
-                node.state = Node.NodeState.DEFAULT;
+        for (int i = 0; i < map.getWidth(); i++) {
+            for (int j = 0; j < map.getHeight(); j++) {
+                Node node = map.getNode(i, j);
+                if (node.state == Node.NodeState.BLOCKED)
+                    node.state = Node.NodeState.DEFAULT;
+            }
         }
+        map.updatNearbyNode();
     }
 
     private void drawPath() {
-        if (pathfinding.hasPath()) {
+        if (pathfinding.getPath().size > 0) {
             Array<Node> path = pathfinding.getPath();
             for (int i = 0; i + 1 < path.size; i++) {
                 Node firstNode = path.get(i);
                 Node secondNode = path.get(i + 1);
 
-                if (firstNode.i == secondNode.i && firstNode.j > secondNode.j) {
-                    pathVertical.setPosition(firstNode.i * 34f, firstNode.j * 34f - 17);
+                if (firstNode.x == secondNode.x && firstNode.y > secondNode.y) {
+                    pathVertical.setPosition(firstNode.x * 34f, firstNode.y * 34f - 17);
                     pathVertical.draw(batch);
                 }
-                if (firstNode.i == secondNode.i && firstNode.j < secondNode.j) {
-                    pathVertical.setPosition(firstNode.i * 34f, firstNode.j * 34f + 17);
+                if (firstNode.x == secondNode.x && firstNode.y < secondNode.y) {
+                    pathVertical.setPosition(firstNode.x * 34f, firstNode.y * 34f + 17);
                     pathVertical.draw(batch);
 
-                } else if (firstNode.i < secondNode.i && firstNode.j == secondNode.j) {
-                    pathHorizontal.setPosition(firstNode.i * 34f + 17, firstNode.j * 34f);
+                } else if (firstNode.x < secondNode.x && firstNode.y == secondNode.y) {
+                    pathHorizontal.setPosition(firstNode.x * 34f + 17, firstNode.y * 34f);
                     pathHorizontal.draw(batch);
 
-                } else if (firstNode.i > secondNode.i && firstNode.j == secondNode.j) {
-                    pathHorizontal.setPosition(firstNode.i * 34f - 17, firstNode.j * 34f);
+                } else if (firstNode.x > secondNode.x && firstNode.y == secondNode.y) {
+                    pathHorizontal.setPosition(firstNode.x * 34f - 17, firstNode.y * 34f);
                     pathHorizontal.draw(batch);
                 }
             }
@@ -555,7 +575,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
 
     private float speedLevelToStepTime(int speedLevel) {
         if (speedLevel == 0)
-            return 100;
+            return 0.5f;
         return 100f / (60 * speedLevel);
     }
 }

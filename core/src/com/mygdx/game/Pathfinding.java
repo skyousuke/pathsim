@@ -1,69 +1,68 @@
 package com.mygdx.game;
 
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.ai.pfa.indexed.IndexedAStarPathFinder;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.BinaryHeap;
 import com.badlogic.gdx.utils.ObjectMap;
-
-import java.util.Comparator;
-import java.util.PriorityQueue;
-import java.util.Queue;
 
 public class Pathfinding {
 
     private Node start;
     private Node goal;
 
-    private Queue<Node> frontiers;
-    private ObjectMap<Node, Node> cameFrom;
+    private NodeRecord[] nodeRecords;
+    private BinaryHeap<NodeRecord> frontiers;
+    private NodeRecord current;
+
+    private int searchId;
+
     private Array<Node> path;
     private Array<Node> neighbors;
-    private ObjectMap<Node, Integer> costSoFar;
 
-    private Array<Node> nodes;
-    private Node currentFrontier;
+    private GameMap map;
 
-    private boolean hasPath;
+    private static final int UNVISITED = 0;
+    private static final int FRONTIER = 1;
+    private static final int VISITED = 2;
 
-    public Pathfinding() {
-        cameFrom = new ObjectMap<Node, Node>();
+    public Pathfinding(GameMap map) {
         path = new Array<Node>();
-        neighbors = new Array<Node>();
-        costSoFar = new ObjectMap<Node, Integer>();
+        neighbors = new Array<Node>(false, 4);
+        this.map = map;
+
+        nodeRecords = new NodeRecord[map.getWidth() * map.getHeight()];
+        frontiers = new BinaryHeap<NodeRecord>();
     }
 
-    public void start(Node start, final Node goal, Array<Node> nodes) {
+    public void start(Node start, Node goal) {
         this.start = start;
         this.goal = goal;
-        this.nodes = nodes;
 
-        Comparator<Node> comparator = new Comparator<Node>() {
-            @Override
-            public int compare(Node node1, Node node2) {
-                return (node1.findCostSoFar(costSoFar) + node1.findHeuristicCost(goal))
-                        - (node2.findCostSoFar(costSoFar) + node2.findHeuristicCost(goal));
-            }
-        };
-        frontiers = new PriorityQueue<Node>(1, comparator);
+        if (++searchId < 0) searchId = 1;
 
-        costSoFar.put(start, 0);
-        frontiers.add(start);
+        path.clear();
+        frontiers.clear();
+
+        NodeRecord startRecord = getNodeRecord(start);
+        startRecord.node = start;
+        startRecord.fromeNode = null;
+        startRecord.costSoFar = 0;
+
+        frontiers.add(startRecord, getNodeHeuristic(start, goal));
         start.state = Node.NodeState.FRONTIER;
-    }
-
-    public void init() {
-        hasPath = false;
-
-        costSoFar.clear();
-        cameFrom.clear();
+        start.setSearchId(getSearchId());
     }
 
     public boolean nextFrontier() {
-        if (frontiers.isEmpty())
+        if (frontiers.size == 0)
             return false;
 
-        currentFrontier = frontiers.poll();
-        currentFrontier.state = Node.NodeState.CURRENT_FRONTIER;
+        current = frontiers.pop();
+        current.node.state = Node.NodeState.CURRENT_FRONTIER;
+        current.category = FRONTIER;
 
-        if (currentFrontier.equals(goal)) {
+        if (current.node.equals(goal)) {
             buildPath();
             return false;
         }
@@ -72,60 +71,61 @@ public class Pathfinding {
         return true;
     }
 
-    public boolean hasPath() {
-        return hasPath;
-    }
-
     private void findNeighbors() {
         neighbors.clear();
-        for (int i = 0; i < nodes.size; i++) {
-            Node node = nodes.get(i);
-            if (node == currentFrontier) continue;
-            if (node.i == currentFrontier.i - 1 && node.j == currentFrontier.j
-                    || node.i == currentFrontier.i + 1 && node.j == currentFrontier.j
-                    || node.i == currentFrontier.i && node.j == currentFrontier.j - 1
-                    || node.i == currentFrontier.i && node.j == currentFrontier.j + 1) {
-                if (node.state != Node.NodeState.BLOCKED) {
-                    neighbors.add(node);
-                    node.drawNeighborFrame = true;
-                }
+        for (int i = 0; i < current.node.getNearbyNodes().size; i++) {
+            Node node = current.node.getNearbyNodes().get(i);
+            if (node.state != Node.NodeState.BLOCKED) {
+                neighbors.add(node);
+                node.drawNeighborFrame = true;
             }
         }
     }
 
     public boolean nextNeighbor() {
         if (neighbors.size == 0) {
-            currentFrontier.state = Node.NodeState.VISITED;
+            current.node.state = Node.NodeState.VISITED;
+            current.category = VISITED;
             return false;
         }
 
         Node neighbor = neighbors.pop();
         neighbor.drawNeighborFrame = false;
-        int newCost = costSoFar.get(currentFrontier) + neighbor.cost;
-        if (!costSoFar.containsKey(neighbor) || newCost < costSoFar.get(neighbor)) {
-            costSoFar.put(neighbor, newCost);
-            frontiers.add(neighbor);
-            cameFrom.put(neighbor, currentFrontier);
-            neighbor.state = Node.NodeState.FRONTIER;
+        int newCost = current.costSoFar + neighbor.cost;
+        int nodeHeuristic;
+
+        NodeRecord nodeRecord = getNodeRecord(neighbor);
+
+        if (nodeRecord.category == VISITED) {
+            if (nodeRecord.costSoFar <= newCost) return true;
+            nodeHeuristic = (int) nodeRecord.getTotalCost() - nodeRecord.costSoFar;
+        } else if (nodeRecord.category == FRONTIER) {
+            if (nodeRecord.costSoFar <= newCost) return true;
+            frontiers.remove(nodeRecord);
+            nodeHeuristic = (int) nodeRecord.getTotalCost() - nodeRecord.costSoFar;
+        } else {
+            nodeHeuristic = getNodeHeuristic(neighbor, goal);
         }
+
+        nodeRecord.costSoFar = newCost;
+        nodeRecord.fromeNode = current.node;
+        nodeRecord.category = FRONTIER;
+        frontiers.add(nodeRecord, (float)(newCost + nodeHeuristic));
+
+        neighbor.setSearchId(getSearchId());
+        neighbor.state = Node.NodeState.FRONTIER;
         return true;
     }
 
     private void buildPath() {
-        path.clear();
-        hasPath = true;
-
         if (goal == start)
             return;
 
-        Node current = goal;
-        path.add(current);
-
-        while (!current.equals(start)) {
-            current = cameFrom.get(current);
-            path.add(current);
+        while (current.fromeNode != null) {
+            path.add(current.node);
+            current = nodeRecords[current.fromeNode.getIndex()];
         }
-
+        path.add(start);
         path.reverse();
     }
 
@@ -133,15 +133,48 @@ public class Pathfinding {
         return path;
     }
 
-    public ObjectMap<Node, Integer> getCostSoFar() {
-        return costSoFar;
+    private int getNodeHeuristic(Node start, Node goal) {
+        return Math.abs(start.x - goal.x) + Math.abs(start.y - goal.y);
     }
 
-    public ObjectMap<Node, Node> getCameFrom() {
-        return cameFrom;
+    private NodeRecord getNodeRecord (Node node) {
+        int index = node.getIndex();
+        NodeRecord nr = nodeRecords[index];
+        if (nr != null) {
+            if (nr.searchId != searchId) {
+                nr.category = UNVISITED;
+                nr.searchId = searchId;
+            }
+            return nr;
+        }
+        nr = nodeRecords[index] = new NodeRecord();
+        nr.node = node;
+        nr.searchId = searchId;
+        return nr;
     }
 
-    public Node getGoal() {
-        return goal;
+    public static class NodeRecord extends BinaryHeap.Node {
+
+        Node node;
+        Node fromeNode;
+        int costSoFar;
+        int category;
+        int searchId;
+
+        public NodeRecord() {
+            super(0);
+        }
+
+        public float getTotalCost() {
+            return getValue();
+        }
+    }
+
+    public NodeRecord[] getNodeRecords() {
+        return nodeRecords;
+    }
+
+    public int getSearchId() {
+        return searchId;
     }
 }

@@ -25,7 +25,7 @@ allprojects {
         roboVMVersion = '2.3.3'
         box2DLightsVersion = '1.4'
         ashleyVersion = '1.7.0'
-        aiVersion = '1.8.0'
+        aiVersion = '1.8.1'
     }
 
     repositories {
@@ -60,6 +60,7 @@ project(":html") {
         compile "com.badlogicgames.gdx:gdx:$gdxVersion:sources"
         compile "com.badlogicgames.gdx:gdx-backend-gwt:$gdxVersion:sources"
         compile "com.github.skyousuke:gdx-utils:0.0.16:sources"
+        compile "com.badlogicgames.gdx:gdx-ai:$aiVersion:sources"
         
     }
 }
@@ -71,6 +72,7 @@ project(":core") {
     dependencies {
         compile "com.badlogicgames.gdx:gdx:$gdxVersion"
         compile "com.github.skyousuke:gdx-utils:0.0.16"
+        compile "com.badlogicgames.gdx:gdx-ai:$aiVersion"
         
     }
 }

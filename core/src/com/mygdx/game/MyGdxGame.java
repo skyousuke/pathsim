@@ -1,57 +1,60 @@
 package com.mygdx.game;
 
 import com.badlogic.gdx.*;
-import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.*;
 import com.badlogic.gdx.graphics.g2d.*;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.*;
+import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
+import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
-import com.badlogic.gdx.utils.Pool;
 import com.badlogic.gdx.utils.Pools;
+import com.badlogic.gdx.utils.StringBuilder;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.github.skyousuke.gdxutils.CoordUtils;
 import com.github.skyousuke.gdxutils.skin.Skins;
 
+import static com.badlogic.gdx.scenes.scene2d.actions.Actions.*;
+
 public class MyGdxGame extends InputAdapter implements ApplicationListener {
 
     private TextureAtlas atlas;
 
-    public TextureRegion nodeRegion;
-    public TextureRegion frontierRegion;
-    public TextureRegion currentFrontierRegion;
-    public TextureRegion neighborRegion;
-    public TextureRegion visitedRegion;
-    public TextureRegion blockedRegion;
+    TextureRegion nodeRegion;
+    TextureRegion frontierRegion;
+    TextureRegion currentFrontierRegion;
+    TextureRegion neighborRegion;
+    TextureRegion visitedRegion;
+    TextureRegion blockedRegion;
     private TextureRegion startRegion;
     private TextureRegion goalRegion;
 
-    public Sprite arrowRight;
-    public Sprite arrowUp;
-    public Sprite arrowLeft;
-    public Sprite arrowDown;
+    Sprite arrowRight;
+    Sprite arrowUp;
+    Sprite arrowLeft;
+    Sprite arrowDown;
 
     private Sprite pathHorizontal;
     private Sprite pathVertical;
 
-    public SpriteBatch batch;
+    SpriteBatch batch;
 
     private Stage stage;
     private Viewport viewport;
 
     private Skin skin;
-    public BitmapFont font;
+    BitmapFont font;
 
     private GameMap map;
     private Node startNode;
     private Node goalNode;
-    private Pathfinding pathfinding;
+    private PathFinder pathFinder;
 
     private boolean removeBlockedMode;
     private boolean addBlockedMode;
@@ -67,21 +70,22 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
 
     private TextButton.TextButtonStyle disabledButtonStyle;
 
-    private Stack firstStepLabel;
-    private Stack secondStepLabel;
-    private Stack thirdStepLabel;
-    private Stack fourthStepLabel;
+    private Label firstStepLabel;
+    private Label secondStepLabel;
+    private Label thirdStepLabel;
+    private Label fourthStepLabel;
 
-    private Pool<Image> selectionImagePool = new Pool<Image>() {
-        @Override
-        protected Image newObject() {
-            Image image = new Image(skin.get(List.ListStyle.class).selection);
-            image.setFillParent(true);
-            return image;
-        }
-    };
     private CheckBox pathCheckbox;
     private TextButton runButton;
+
+    private TextField heuristicField;
+    private Window heuristicWindow;
+
+    private float screenWidth;
+    private float screenHeight;
+
+    private Cursor mouseCursor;
+    private Cursor handCursor;
 
     public enum GameState {
         START,
@@ -118,7 +122,14 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         pathVertical = new Sprite(pathRegion);
         pathVertical.rotate(90);
 
+        if (Gdx.app.getType() == Application.ApplicationType.Desktop) {
+            mouseCursor = Gdx.graphics.newCursor(new Pixmap(Gdx.files.internal("cursor1.png")), 0, 0);
+            handCursor = Gdx.graphics.newCursor(new Pixmap(Gdx.files.internal("cursor2.png")), 0, 0);
+            Gdx.graphics.setCursor(mouseCursor);
+        }
+
         skin = Skins.DEFAULT_THAI.createSkin();
+        skin.getRegion("white").getTexture().setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
 
         font = skin.getFont("default");
 
@@ -130,20 +141,21 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
                 ((NinePatchDrawable) skin.get(TextButton.ButtonStyle.class).up).tint(Color.DARK_GRAY);
         disabledButtonStyle.fontColor = Color.GRAY;
 
-        final float screenWidth = Gdx.graphics.getWidth();
-        final float screenHeight = Gdx.graphics.getHeight();
+        screenWidth = Gdx.graphics.getWidth();
+        screenHeight = Gdx.graphics.getHeight();
 
         batch = new SpriteBatch();
         stage = new Stage(new FitViewport(screenWidth, screenHeight));
         viewport = new FitViewport(screenWidth, screenHeight);
-        viewport.getCamera().position.set(screenWidth / 2 - 30, screenHeight / 2 - 35, 0);
+        viewport.getCamera().position.set(screenWidth / 2 - 30, screenHeight / 2 - 70, 0);
 
         Gdx.input.setInputProcessor(new InputMultiplexer(stage, this));
         Node.setGame(this);
 
         map = new GameMap(19, 15);
 
-        Table menu = new Table();
+        Table rightUi = new Table();
+        Table bottomUi = new Table();
 
         TextButton clearBlockedButton = new TextButton("ลบสี่งกีดขวางทั้งหมด", skin);
         clearBlockedButton.addListener(new ClickListener() {
@@ -259,68 +271,97 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
 
         pathCheckbox = new CheckBox("แสดงเส้นทาง", skin);
 
-        menu.align(Align.bottomLeft);
-        menu.row().left();
-        menu.add(costCheckBox).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(costSoFarCheckBox).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(heuristicCostCheckBox).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(aStarCostCheckBox).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(arrowCheckbox);
-        menu.add(pathCheckbox).colspan(2);
-        menu.row().left().padTop(10f);
-        menu.add(resetButton).size(120, 30).padRight(5f);
-        menu.add(clearBlockedButton).size(150, 30).colspan(2);
-        menu.row().left().padTop(10f);
-        menu.add(runButton).size(120, 30).padRight(5f);
-        menu.add(new Label("ความเร็ว", skin)).padRight(5f);
-        menu.add(speedSlider).size(100, 30);
+        rightUi.align(Align.bottomLeft);
+        rightUi.row().left();
+        rightUi.add(costCheckBox);
+        rightUi.add(costSoFarCheckBox).spaceLeft(10f);
+        rightUi.row().left().padTop(5f);
+        rightUi.add(heuristicCostCheckBox);
+        rightUi.add(aStarCostCheckBox).spaceLeft(10f);
 
-        menu.row().left().padTop(10f);
-        menu.add(new Label("Step การทำงาน", skin)).colspan(3);
+        rightUi.row().left().padTop(15f);
+        rightUi.add(newLabelWithBackgroundColor("Step การทำงาน", skin, Color.NAVY)).colspan(2);
 
-        firstStepLabel = new Stack(new Label("1. ให้จุด start เป็น frontier", skin));
-        secondStepLabel = new Stack(new Label("2. หา neighbor รอบๆ frontier", skin));
-        thirdStepLabel = new Stack(new Label("3. บันทึกลูกศร และให้ neighbor เป็น frontier", skin));
-        fourthStepLabel = new Stack(new Label("4. เจอ goal แล้วลากเส้นตามลูกศรจาก goal มา start", skin));
+        firstStepLabel = newOwnStyleLabel("1. ให้จุด start เป็น frontier", skin);
+        secondStepLabel = newOwnStyleLabel("2. หา neighbor รอบๆ frontier", skin);
+        thirdStepLabel = newOwnStyleLabel("3. บันทึกลูกศร และให้ neighbor เป็น frontier", skin);
+        fourthStepLabel = newOwnStyleLabel("4. เมื่อเจอ goal ให้ทำเส้นทางตามลูกศรจาก goal มา start", skin);
 
-        menu.row().left().padTop(5f);
-        menu.add(firstStepLabel).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(secondStepLabel).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(thirdStepLabel).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(fourthStepLabel).colspan(3);
+        rightUi.row().left().padTop(5f);
+        rightUi.add(firstStepLabel).colspan(2);
+        rightUi.row().left().padTop(5f);
+        rightUi.add(secondStepLabel).colspan(2);
+        rightUi.row().left().padTop(5f);
+        rightUi.add(thirdStepLabel).colspan(2);
+        rightUi.row().left().padTop(5f);
+        rightUi.add(fourthStepLabel).colspan(2);
 
-        menu.row().left().padTop(10f);
-        menu.add(nextStepButton).size(120, 30).colspan(3);
+        rightUi.row().left().padTop(10f);
+        rightUi.add(nextStepButton).size(120, 30).colspan(2);
 
-        menu.row().left().padTop(15f);
-        menu.add(new Label("วิธีการใช้งาน", skin)).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(new Label("- คลิกที่ Grid สีขาวเพื่อเพิ่ม/ลบสิ่งกีดขวาง", skin)).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(new Label("- ลากรูป Satoshi เพื่อปรับจุด Start", skin)).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(new Label("- ลากรูป Pikachu เพื่อปรับจุด Goal", skin)).colspan(3);
-        menu.row().left().padTop(5f);
-        menu.add(new Label("- กดค้นหาเส้นทาง เพื่อดู Animation การทำงาน", skin)).colspan(3);
+        rightUi.row().left().padTop(15f);
+        rightUi.add(newLabelWithBackgroundColor("วิธีการใช้งาน", skin, Color.FOREST)).colspan(2);
+        rightUi.row().left().padTop(5f);
+        rightUi.add(new Label("- คลิกที่ Grid สีขาวเพื่อเพิ่ม/ลบสิ่งกีดขวาง", skin)).colspan(2);
+        rightUi.row().left().padTop(5f);
+        rightUi.add(new Label("- ลากรูป Satoshi เพื่อปรับจุด Start", skin)).colspan(2);
+        rightUi.row().left().padTop(5f);
+        rightUi.add(new Label("- ลากรูป Pikachu เพื่อปรับจุด Goal", skin)).colspan(2);
+        rightUi.row().left().padTop(5f);
+        rightUi.add(new Label("- กดเริ่มหาเส้นทาง เพื่อดู Animation การทำงาน", skin)).colspan(2);
 
-        menu.setPosition(700, 30);
+        pathFinder = new PathFinder(map);
+        Label heuristicLabel = new Label(pathFinder.getHeuristic(), skin);
+        heuristicLabel.setEllipsis(true);
 
-        stage.addActor(menu);
+        heuristicField = new TextField(pathFinder.getHeuristic(), skin);
+        heuristicField.getStyle().background = ((TextureRegionDrawable) skin.getDrawable("white")).tint(Color.BROWN);
 
-        pathfinding = new Pathfinding(map);
+        heuristicWindow = createHeuristicWindow(heuristicLabel);
+        Button changeHeuristicButton = new TextButton("เปลี่ยน Heuristic", skin);
+        changeHeuristicButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                heuristicWindow.addAction(Actions.sequence(visible(true), fadeIn(0.4f)));
+                stage.setKeyboardFocus(heuristicField);
+                heuristicField.setCursorPosition(heuristicField.getText().length());
+                heuristicField.setSelection(0, heuristicField.getText().length());
+            }
+        });
+
+        rightUi.row().left().padTop(15f);
+        rightUi.add(newLabelWithBackgroundColor("Heuristic Function", skin, Color.FIREBRICK)).colspan(2);
+        rightUi.row().left().padTop(10f);
+        rightUi.add(heuristicLabel).colspan(2).width(340);
+        rightUi.row().left().padTop(10f);
+        rightUi.add(changeHeuristicButton).size(120, 30);
+        rightUi.pack();
+        rightUi.setPosition(700, 560, Align.topLeft);
+
+        bottomUi.add(clearBlockedButton).size(150, 30).padRight(5f);
+        bottomUi.add(resetButton).size(70, 30).padRight(5f);
+        bottomUi.add(runButton).size(120, 30).padRight(10f);
+        bottomUi.add(new Label("ความเร็ว", skin)).padRight(5f);
+        bottomUi.add(speedSlider).size(120, 30).padRight(10f);
+        bottomUi.add(arrowCheckbox).padRight(15f);
+        bottomUi.add(pathCheckbox).padRight(15f);
+        bottomUi.pack();
+
+        bottomUi.setPosition(30, 20);
+
+        stage.addActor(rightUi);
+        stage.addActor(bottomUi);
+        stage.addActor(heuristicWindow);
 
         startNode = map.getNode(5, 10);
         goalNode = map.getNode(15, 10);
 
         arrowCheckbox.setChecked(true);
         pathCheckbox.setChecked(true);
+    }
+
+    private Label newOwnStyleLabel(String text, Skin skin) {
+        return new Label(text, new Label.LabelStyle(skin.get(Label.LabelStyle.class)));
     }
 
     private void reset() {
@@ -333,9 +374,9 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
                 node.setSearchId(-1);
             }
         }
-        map.updatNearbyNode();
+        map.updateNearbyNode();
 
-        pathfinding.getPath().clear();
+        pathFinder.getPath().clear();
 
         state = GameState.START;
         nextStepButton.setTouchable(Touchable.enabled);
@@ -375,7 +416,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
 
         for (int i = 0; i < map.getWidth(); i++) {
             for (int j = 0; j < map.getHeight(); j++) {
-                map.getNode(i, j).draw(pathfinding);
+                map.getNode(i, j).draw(pathFinder);
             }
         }
         batch.draw(startRegion, startNode.x * 34f, startNode.y * 34f);
@@ -394,33 +435,39 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
     }
 
     @Override
+    public void pause() {
+    }
+
+    @Override
+    public void resume() {
+    }
+
+    @Override
     public void dispose() {
         batch.dispose();
         atlas.dispose();
         skin.dispose();
         stage.dispose();
+        if (Gdx.app.getType() == Application.ApplicationType.Desktop) {
+            mouseCursor.dispose();
+            handCursor.dispose();
+        }
     }
-
-    @Override
-    public void pause() {}
-
-    @Override
-    public void resume() {}
 
     private void nextStep() {
         switch (state) {
             case START:
-                pathfinding.start(startNode, goalNode);
+                pathFinder.start(startNode, goalNode);
                 state = GameState.SELECT_FRONTIER;
                 setSelectedLabel(firstStepLabel, true);
                 break;
             case SELECT_FRONTIER:
                 setSelectedLabel(firstStepLabel, false);
                 setSelectedLabel(thirdStepLabel, false);
-                boolean finished = !pathfinding.nextFrontier();
+                boolean finished = !pathFinder.nextFrontier();
                 if (finished) {
                     state = GameState.FINISH;
-                    nextStepButton.setText("จบการทำงาน");
+                    nextStepButton.setText("ทำงานจบแล้ว");
                     nextStepButton.setTouchable(Touchable.disabled);
                     nextStepButton.setStyle(disabledButtonStyle);
                     setSelectedLabel(fourthStepLabel, true);
@@ -436,7 +483,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
                 break;
             case SELECT_NEIGHBOR:
                 boolean hasNeighbor;
-                do hasNeighbor = pathfinding.nextNeighbor();
+                do hasNeighbor = pathFinder.nextNeighbor();
                 while (hasNeighbor);
                 state = GameState.SELECT_FRONTIER;
                 setSelectedLabel(secondStepLabel, false);
@@ -447,7 +494,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
 
     @Override
     public boolean touchDown(int touchX, int touchY, int pointer, int button) {
-        if (runningMode) return false;
+        if (runningMode || state != GameState.START) return false;
         Node node = findNodeFromTouch(touchX, touchY);
         if (node == null)
             return false;
@@ -465,7 +512,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
                     node.state = Node.NodeState.DEFAULT;
                     removeBlockedMode = true;
                 }
-                map.updatNearbyNode();
+                map.updateNearbyNode();
             }
         }
 
@@ -479,12 +526,12 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         if (node != null) {
             if (addBlockedMode && (node != startNode && node != goalNode) && node.state == Node.NodeState.DEFAULT) {
                 node.state = Node.NodeState.BLOCKED;
-                map.updatNearbyNode();
+                map.updateNearbyNode();
             }
 
             if (removeBlockedMode && node.state == Node.NodeState.BLOCKED) {
                 node.state = Node.NodeState.DEFAULT;
-                map.updatNearbyNode();
+                map.updateNearbyNode();
             }
 
             if (setStartMode && node != goalNode && node.state != Node.NodeState.BLOCKED)
@@ -529,12 +576,12 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
                     node.state = Node.NodeState.DEFAULT;
             }
         }
-        map.updatNearbyNode();
+        map.updateNearbyNode();
     }
 
     private void drawPath() {
-        if (pathfinding.getPath().size > 0) {
-            Array<Node> path = pathfinding.getPath();
+        if (pathFinder.getPath().size > 0) {
+            Array<Node> path = pathFinder.getPath();
             for (int i = 0; i + 1 < path.size; i++) {
                 Node firstNode = path.get(i);
                 Node secondNode = path.get(i + 1);
@@ -559,17 +606,11 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         }
     }
 
-    private void setSelectedLabel(Stack label, boolean selected) {
+    private void setSelectedLabel(Label label, boolean selected) {
         if (selected) {
-            if (label.getChildren().size == 1) {
-                label.addActorAt(0, selectionImagePool.obtain());
-            }
+            label.getStyle().background = skin.get(List.ListStyle.class).selection;
         } else {
-            if (label.getChildren().size > 1) {
-                Image image = (Image) label.getChildren().get(0);
-                label.removeActor(image);
-                selectionImagePool.free(image);
-            }
+            label.getStyle().background = null;
         }
     }
 
@@ -577,5 +618,220 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         if (speedLevel == 0)
             return 0.5f;
         return 100f / (60 * speedLevel);
+    }
+
+    private Window createHeuristicWindow(final Label heuristicLabel) {
+        final Window window = new Window("กำหนด Heuristic Function", skin);
+
+        final Label currentHeuristic = new Label(pathFinder.getHeuristic(), skin);
+        currentHeuristic.setEllipsis(true);
+
+        TextButton okButton = new TextButton("ตกลง", skin);
+        okButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                boolean success = pathFinder.setHeuristic(heuristicField.getText());
+
+                if (success) {
+                    currentHeuristic.setText(pathFinder.getHeuristic());
+                    heuristicLabel.setText(pathFinder.getHeuristic());
+                    window.addAction(Actions.sequence(fadeOut(0.4f), Actions.visible(false)));
+                } else {
+                    Dialog dialog = new Dialog("มีปัญหาของการกำหนด Heuristic Function", skin);
+                    dialog.text("Heuristic Function ไม่ถูกต้อง!" +
+                            "\nกรุณาตรวจสอบให้แน่ใจว่ากรอกถูกต้อง" +
+                            "\nหรือไม่มีตัวหารเป็น 0 (ตัวแปรมีโอกาสเป็น 0 ได้)");
+                    dialog.getCells().first().padTop(20);
+                    dialog.setPosition(screenWidth / 2, screenHeight / 2, Align.center);
+                    Button button = new TextButton("เข้าใจแล้ว!", skin);
+                    dialog.button(button).getButtonTable().getCell(button).size(80, 30).padTop(10);
+                    dialog.pad(20);
+                    dialog.pack();
+                    dialog.show(stage);
+                }
+            }
+        });
+
+        TextButton cancelButton = new TextButton("ยกเลิก", skin);
+        cancelButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                heuristicField.setText(pathFinder.getHeuristic());
+                window.addAction(Actions.sequence(fadeOut(0.4f), Actions.visible(false)));
+            }
+        });
+
+        Table textAddingButtonTable = new Table();
+        textAddingButtonTable.left();
+        textAddingButtonTable.add(new Label("ตัวแปร:", skin)).width(40);
+        textAddingButtonTable.add(newTextAddingButton("nodeX", skin)).padLeft(10).height(30);
+        textAddingButtonTable.add(newTextAddingButton("nodeY", skin)).padLeft(5).height(30);
+        textAddingButtonTable.add(newTextAddingButton("goalX", skin)).padLeft(5).height(30);
+        textAddingButtonTable.add(newTextAddingButton("goalY", skin)).padLeft(5).height(30);
+        textAddingButtonTable.add(new Label("ตัวดำเนินการ:", skin)).width(80).padLeft(10);
+        textAddingButtonTable.add(newTextAddingButton("+", skin)).padLeft(10).height(30);
+        textAddingButtonTable.add(newTextAddingButton("-", skin)).padLeft(5).height(30);
+        textAddingButtonTable.add(newTextAddingButton("*", skin)).padLeft(5).height(30);
+        textAddingButtonTable.add(newTextAddingButton("/", skin)).padLeft(5).height(30);
+        textAddingButtonTable.add(newTextAddingButton("%", skin)).padLeft(5).height(30);
+        textAddingButtonTable.add(newTextAddingButton("^", skin)).padLeft(5).height(30);
+
+        Table functionButtonTable = new Table();
+        functionButtonTable.left();
+        functionButtonTable.add(new Label("ฟังก์ชัน:", skin)).width(40);
+        functionButtonTable.add(newFunctionButton("ABS", skin)).padLeft(10).height(30);
+        functionButtonTable.add(newFunctionButton("SQRT", skin)).padLeft(5).height(30);
+        functionButtonTable.add(newFunctionButton("LOG", skin)).padLeft(5).height(30);
+        functionButtonTable.add(newFunctionButton("LOG10", skin)).padLeft(5).height(30);
+        functionButtonTable.add(newFunctionButton("MIN", skin)).padLeft(5).height(30);
+        functionButtonTable.add(newFunctionButton("MAX", skin)).padLeft(5).height(30);
+        functionButtonTable.add(newFunctionButton("ROUND", skin)).padLeft(5).height(30);
+        functionButtonTable.add(newFunctionButton("FLOOR", skin)).padLeft(5).height(30);
+        functionButtonTable.add(newFunctionButton("CEILING", skin)).padLeft(5).height(30);
+        functionButtonTable.add(newFunctionButton("RAD", skin)).padLeft(5).height(30);
+        functionButtonTable.add(newFunctionButton("DEG", skin)).padLeft(5).height(30);
+
+        Table functionButtonTable2 = new Table();
+        functionButtonTable2.left();
+        functionButtonTable2.add(newFunctionButton("SIN", skin)).padLeft(50).height(30);
+        functionButtonTable2.add(newFunctionButton("COS", skin)).padLeft(5).height(30);
+        functionButtonTable2.add(newFunctionButton("TAN", skin)).padLeft(5).height(30);
+        functionButtonTable2.add(newFunctionButton("CSC", skin)).padLeft(5).height(30);
+        functionButtonTable2.add(newFunctionButton("SEC", skin)).padLeft(5).height(30);
+        functionButtonTable2.add(newFunctionButton("COT", skin)).padLeft(5).height(30);
+        functionButtonTable2.add(newFunctionButton("ASIN", skin)).padLeft(5).height(30);
+        functionButtonTable2.add(newFunctionButton("ACOS", skin)).padLeft(5).height(30);
+        functionButtonTable2.add(newFunctionButton("ATAN", skin)).padLeft(5).height(30);
+        functionButtonTable2.add(newFunctionButton("ACOT", skin)).padLeft(5).height(30);
+        functionButtonTable2.add(newFunctionButton("ATAN2", skin)).padLeft(5).height(30);
+
+        Table functionButtonTable3 = new Table();
+        functionButtonTable3.left();
+        functionButtonTable3.add(newFunctionButton("SINH", skin)).padLeft(50).height(30);
+        functionButtonTable3.add(newFunctionButton("COSH", skin)).padLeft(5).height(30);
+        functionButtonTable3.add(newFunctionButton("TANH", skin)).padLeft(5).height(30);
+        functionButtonTable3.add(newFunctionButton("CSCH", skin)).padLeft(5).height(30);
+        functionButtonTable3.add(newFunctionButton("SECH", skin)).padLeft(5).height(30);
+        functionButtonTable3.add(newFunctionButton("ASINH", skin)).padLeft(5).height(30);
+        functionButtonTable3.add(newFunctionButton("ACOSH", skin)).padLeft(5).height(30);
+        functionButtonTable3.add(newFunctionButton("ATANH", skin)).padLeft(5).height(30);
+        functionButtonTable3.add(newFunctionButton("RANDOM", skin)).padLeft(5).height(30);
+
+        final Label functionLink = new Label("ดูรายละเอียดของฟังก์ชันที่นี่", skin);
+        functionLink.setColor(Color.CYAN);
+        functionLink.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Gdx.net.openURI("https://github.com/uklimaschewski/EvalEx#supported-functions");
+            }
+        });
+        functionLink.addListener(new InputListener() {
+            @Override
+            public void enter(InputEvent event, float x, float y, int pointer, Actor fromActor) {
+                if (Gdx.app.getType() == Application.ApplicationType.WebGL) {
+                    Gdx.graphics.setSystemCursor(Cursor.SystemCursor.Hand);
+                } else {
+                    Gdx.graphics.setCursor(handCursor);
+                }
+                functionLink.setColor(Color.YELLOW);
+            }
+
+            @Override
+            public void exit(InputEvent event, float x, float y, int pointer, Actor toActor) {
+                if (Gdx.app.getType() == Application.ApplicationType.WebGL) {
+                    Gdx.graphics.setSystemCursor(Cursor.SystemCursor.Arrow);
+                } else {
+                    Gdx.graphics.setCursor(mouseCursor);
+                }
+                functionLink.setColor(Color.CYAN);
+            }
+        });
+
+        window.pad(20);
+        window.top().left();
+        window.row().left().padTop(10);
+        window.add(new Label("Heuristic Function ปัจจุบัน:", skin)).colspan(3);
+        window.row().left().padTop(5);
+        Cell currentHeuristicCell = window.add(currentHeuristic).colspan(3);
+        window.row().left().padTop(10);
+        window.add(new Label("Heuristic Function ใหม่:", skin)).colspan(3);
+        window.row().left();
+        window.add(heuristicField).expandX().fillX();
+        window.add(okButton).size(55, 30).padLeft(10);
+        window.add(cancelButton).size(55, 30).padLeft(5);
+        window.row().left().padTop(10);
+        window.add(textAddingButtonTable).colspan(3);
+        window.row().left().padTop(10);
+        window.add(functionButtonTable).colspan(3);
+        window.row().left().padTop(10);
+        window.add(functionButtonTable2).colspan(3);
+        window.row().left().padTop(10);
+        window.add(functionButtonTable3).colspan(3);
+        window.row().left().padTop(10);
+        window.add(functionLink).colspan(3).padLeft(50);
+        window.pack();
+        currentHeuristicCell.width(functionButtonTable.getWidth());
+        window.setPosition(screenWidth / 2, screenHeight / 2, Align.center);
+        window.addAction(alpha(0));
+        return window;
+    }
+
+    private Button newTextAddingButton(final String variableName, Skin skin) {
+        TextButton variableButton = new TextButton(' ' + variableName + ' ', skin);
+        variableButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                final String selection = heuristicField.getSelection();
+                if (!selection.equals("")) {
+                    setSelectionText(heuristicField, variableName);
+                } else {
+                    insertText(heuristicField, variableName);
+                }
+            }
+        });
+        return variableButton;
+    }
+
+    private Button newFunctionButton(final String functionName, Skin skin) {
+        TextButton functionButton = new TextButton(' ' + functionName + ' ', skin);
+        functionButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                final String selection = heuristicField.getSelection();
+                if (!selection.equals("")) {
+                    setSelectionText(heuristicField, functionName + '(' + selection + ')');
+                } else {
+                    insertText(heuristicField, functionName + "()");
+                }
+            }
+        });
+        return functionButton;
+    }
+
+    private Label newLabelWithBackgroundColor(String text, Skin skin, Color backgroundColor) {
+        TextureRegionDrawable drawable = (TextureRegionDrawable) skin.getDrawable("white");
+        Label.LabelStyle style = new Label.LabelStyle(skin.get(Label.LabelStyle.class));
+        style.background = drawable.tint(backgroundColor);
+        return new Label(text, style);
+    }
+
+    private void setSelectionText(TextField textField, String newText) {
+        int selectionStart = textField.getSelectionStart();
+        int cursorPosition = textField.getCursorPosition();
+        int minIndex = Math.min(selectionStart, cursorPosition);
+        int maxIndex = Math.max(selectionStart, cursorPosition);
+        StringBuilder sb = new StringBuilder(textField.getText());
+        sb.delete(minIndex, maxIndex);
+        sb.insert(minIndex, newText);
+        textField.setText(sb.toString());
+        textField.setCursorPosition(minIndex + newText.length());
+    }
+
+    private void insertText(TextField textField, String text) {
+        int cursorPosition = textField.getCursorPosition();
+        StringBuilder sb = new StringBuilder(textField.getText());
+        sb.insert(cursorPosition, text);
+        textField.setText(sb.toString());
+        textField.setCursorPosition(cursorPosition + text.length());
     }
 }

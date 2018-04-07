@@ -1,7 +1,5 @@
 package com.mygdx.game;
 
-import com.badlogic.gdx.utils.Array;
-
 public class GameMap {
 
     Node nodes[][];
@@ -19,15 +17,11 @@ public class GameMap {
                 nodes[i][j] = new Node(this, i, j);
             }
         }
-        updatNearbyNode();
+        updateNearbyNode();
     }
 
     public Node getNode(int x, int y) {
-        Node node = nodes[x][y];
-        if (node == null) {
-            throw new IllegalStateException("fuck!");
-        }
-        return node;
+        return nodes[x][y];
     }
 
     public int getWidth() {
@@ -38,7 +32,7 @@ public class GameMap {
         return height;
     }
 
-    public void updatNearbyNode() {
+    public void updateNearbyNode() {
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
                 nodes[i][j].updateNearbyNode(this);

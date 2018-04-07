@@ -1,15 +1,19 @@
 package com.mygdx.game;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.ai.pfa.indexed.IndexedAStarPathFinder;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.BinaryHeap;
-import com.badlogic.gdx.utils.ObjectMap;
+import com.udojava.evalex.Expression;
 
-public class Pathfinding {
+import java.math.BigDecimal;
+
+public class PathFinder {
+
+    private static final String DEFAULT_HEURISTIC = "ABS(nodeX - goalX) + ABS(nodeY - goalY)";
 
     private Node start;
     private Node goal;
+    private String heuristic = DEFAULT_HEURISTIC;
 
     private NodeRecord[] nodeRecords;
     private BinaryHeap<NodeRecord> frontiers;
@@ -20,16 +24,13 @@ public class Pathfinding {
     private Array<Node> path;
     private Array<Node> neighbors;
 
-    private GameMap map;
-
     private static final int UNVISITED = 0;
     private static final int FRONTIER = 1;
     private static final int VISITED = 2;
 
-    public Pathfinding(GameMap map) {
+    public PathFinder(GameMap map) {
         path = new Array<Node>();
         neighbors = new Array<Node>(false, 4);
-        this.map = map;
 
         nodeRecords = new NodeRecord[map.getWidth() * map.getHeight()];
         frontiers = new BinaryHeap<NodeRecord>();
@@ -46,7 +47,7 @@ public class Pathfinding {
 
         NodeRecord startRecord = getNodeRecord(start);
         startRecord.node = start;
-        startRecord.fromeNode = null;
+        startRecord.fromNode = null;
         startRecord.costSoFar = 0;
 
         frontiers.add(startRecord, getNodeHeuristic(start, goal));
@@ -91,26 +92,26 @@ public class Pathfinding {
 
         Node neighbor = neighbors.pop();
         neighbor.drawNeighborFrame = false;
-        int newCost = current.costSoFar + neighbor.cost;
-        int nodeHeuristic;
+        float newCost = current.costSoFar + neighbor.cost;
+        float nodeHeuristic;
 
         NodeRecord nodeRecord = getNodeRecord(neighbor);
 
         if (nodeRecord.category == VISITED) {
             if (nodeRecord.costSoFar <= newCost) return true;
-            nodeHeuristic = (int) nodeRecord.getTotalCost() - nodeRecord.costSoFar;
+            nodeHeuristic = nodeRecord.getTotalCost() - nodeRecord.costSoFar;
         } else if (nodeRecord.category == FRONTIER) {
             if (nodeRecord.costSoFar <= newCost) return true;
             frontiers.remove(nodeRecord);
-            nodeHeuristic = (int) nodeRecord.getTotalCost() - nodeRecord.costSoFar;
+            nodeHeuristic = nodeRecord.getTotalCost() - nodeRecord.costSoFar;
         } else {
             nodeHeuristic = getNodeHeuristic(neighbor, goal);
         }
 
         nodeRecord.costSoFar = newCost;
-        nodeRecord.fromeNode = current.node;
+        nodeRecord.fromNode = current.node;
         nodeRecord.category = FRONTIER;
-        frontiers.add(nodeRecord, (float)(newCost + nodeHeuristic));
+        frontiers.add(nodeRecord, newCost + nodeHeuristic);
 
         neighbor.setSearchId(getSearchId());
         neighbor.state = Node.NodeState.FRONTIER;
@@ -121,9 +122,9 @@ public class Pathfinding {
         if (goal == start)
             return;
 
-        while (current.fromeNode != null) {
+        while (current.fromNode != null) {
             path.add(current.node);
-            current = nodeRecords[current.fromeNode.getIndex()];
+            current = nodeRecords[current.fromNode.getIndex()];
         }
         path.add(start);
         path.reverse();
@@ -133,8 +134,18 @@ public class Pathfinding {
         return path;
     }
 
-    private int getNodeHeuristic(Node start, Node goal) {
-        return Math.abs(start.x - goal.x) + Math.abs(start.y - goal.y);
+    private float getNodeHeuristic(Node node, Node goal) {
+        BigDecimal nodeX = new BigDecimal(node.x);
+        BigDecimal nodeY = new BigDecimal(node.y);
+        BigDecimal goalX = new BigDecimal(goal.x);
+        BigDecimal goalY = new BigDecimal(goal.y);
+
+        Expression expression = new Expression(heuristic)
+                .with("nodeX", nodeX)
+                .with("goalX", goalX)
+                .with("nodeY", nodeY)
+                .with("goalY", goalY);
+        return expression.eval().floatValue();
     }
 
     private NodeRecord getNodeRecord (Node node) {
@@ -156,8 +167,8 @@ public class Pathfinding {
     public static class NodeRecord extends BinaryHeap.Node {
 
         Node node;
-        Node fromeNode;
-        int costSoFar;
+        Node fromNode;
+        float costSoFar;
         int category;
         int searchId;
 
@@ -176,5 +187,31 @@ public class Pathfinding {
 
     public int getSearchId() {
         return searchId;
+    }
+
+    public boolean setHeuristic(String heuristic) {
+        this.heuristic = heuristic;
+        Expression expression = new Expression(heuristic)
+                .with("nodeX", new BigDecimal(0))
+                .with("goalX", new BigDecimal(0))
+                .with("nodeY", new BigDecimal(0))
+                .with("goalY", new BigDecimal(0));
+        boolean hasException = false;
+        try {
+            expression.eval();
+        } catch (Expression.ExpressionException e) {
+            hasException = true;
+        } catch (ArithmeticException e) {
+            hasException = true;
+        }
+        if (hasException) {
+            this.heuristic = DEFAULT_HEURISTIC;
+            return false;
+        }
+        return true;
+    }
+
+    public String getHeuristic() {
+        return heuristic;
     }
 }

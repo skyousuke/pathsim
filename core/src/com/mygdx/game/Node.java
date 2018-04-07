@@ -4,7 +4,6 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
-import com.badlogic.gdx.utils.ObjectMap;
 
 public class Node {
 
@@ -24,7 +23,7 @@ public class Node {
 
     public int x;
     public int y;
-    public int cost;
+    public float cost;
     public NodeState state;
     public boolean drawNeighborFrame;
 
@@ -60,11 +59,11 @@ public class Node {
             nearbyNodes.add(map.getNode(x, y + 1));
     }
 
-    public void draw(Pathfinding pathfinding) {
+    public void draw(PathFinder pathFinder) {
         drawNodeTexture();
-        if (searchId == pathfinding.getSearchId()) {
-            drawCost(pathfinding);
-            drawArrow(pathfinding);
+        if (searchId == pathFinder.getSearchId()) {
+            drawCost(pathFinder);
+            drawArrow(pathFinder);
         }
     }
 
@@ -92,34 +91,29 @@ public class Node {
             game.batch.draw(game.neighborRegion, x * 34f, y * 34f);
     }
 
-    private void drawCost(Pathfinding pathfinding) {
+    private void drawCost(PathFinder pathFinder) {
         String text = "";
 
         if (showCost) {
-            text = "" + cost;
+            text = "" + Math.round(cost);
         } else if (showCostSoFar) {
-            final Pathfinding.NodeRecord nodeRecord = pathfinding.getNodeRecords()[index];
+            final PathFinder.NodeRecord nodeRecord = pathFinder.getNodeRecords()[index];
             if (nodeRecord != null) {
-                int costSoFar = nodeRecord.costSoFar;
-                if (costSoFar != 0) {
-                    text = "" + costSoFar;
-                }
+                int costSoFar = Math.round(nodeRecord.costSoFar);
+
+                text = "" + costSoFar;
             }
         } else if (showHeuristicCost) {
-            final Pathfinding.NodeRecord nodeRecord = pathfinding.getNodeRecords()[index];
+            final PathFinder.NodeRecord nodeRecord = pathFinder.getNodeRecords()[index];
             if (nodeRecord != null) {
-                int heuristicCost = (int) nodeRecord.getTotalCost() - nodeRecord.costSoFar;
-                if (heuristicCost != 0) {
-                    text = "" + heuristicCost;
-                }
+                int heuristicCost = Math.round(nodeRecord.getTotalCost() - nodeRecord.costSoFar);
+                text = "" + heuristicCost;
             }
         } else if (showAStarCost) {
-            final Pathfinding.NodeRecord nodeRecord = pathfinding.getNodeRecords()[index];
+            final PathFinder.NodeRecord nodeRecord = pathFinder.getNodeRecords()[index];
             if (nodeRecord != null) {
-                int aStarCost = (int) nodeRecord.getTotalCost();
-                if (aStarCost != 0) {
-                    text = "" + aStarCost;
-                }
+                int aStarCost = Math.round(nodeRecord.getTotalCost());
+                text = "" + aStarCost;
             }
         }
 
@@ -132,14 +126,14 @@ public class Node {
         }
     }
 
-    private void drawArrow(Pathfinding pathfinding) {
+    private void drawArrow(PathFinder pathFinder) {
         if (!showArrow)
             return;
 
-        final Pathfinding.NodeRecord nodeRecord = pathfinding.getNodeRecords()[index];
+        final PathFinder.NodeRecord nodeRecord = pathFinder.getNodeRecords()[index];
 
         if (nodeRecord != null) {
-            Node cameFrom = nodeRecord.fromeNode;
+            Node cameFrom = nodeRecord.fromNode;
             if (cameFrom != null) {
                 if (cameFrom.x == x && cameFrom.y > y) {
                     game.arrowUp.setPosition(x * 34f, y * 34f);

@@ -409,20 +409,23 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
                 nextStep();
             }
         }
-
         stage.act();
 
         batch.begin();
-
         for (int i = 0; i < map.getWidth(); i++) {
             for (int j = 0; j < map.getHeight(); j++) {
                 map.getNode(i, j).draw(pathFinder);
             }
         }
-        batch.draw(startRegion, startNode.x * 34f, startNode.y * 34f);
-        batch.draw(goalRegion, goalNode.x * 34f, goalNode.y * 34f);
         if (pathCheckbox.isChecked())
             drawPath();
+        batch.draw(startRegion, startNode.x * 34f, startNode.y * 34f);
+        batch.draw(goalRegion, goalNode.x * 34f, goalNode.y * 34f);
+        for (int i = 0; i < map.getWidth(); i++) {
+            for (int j = 0; j < map.getHeight(); j++) {
+                map.getNode(i, j).drawCost(pathFinder);
+            }
+        }
         batch.end();
 
         stage.draw();
@@ -471,10 +474,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
                     nextStepButton.setTouchable(Touchable.disabled);
                     nextStepButton.setStyle(disabledButtonStyle);
                     setSelectedLabel(fourthStepLabel, true);
-
                     runningMode = false;
-                    runButton.setTouchable(Touchable.disabled);
-                    runButton.setStyle(disabledButtonStyle);
                     runButton.setText("เจอเส้นทางแล้ว");
                 } else {
                     state = GameState.SELECT_NEIGHBOR;
@@ -494,7 +494,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
 
     @Override
     public boolean touchDown(int touchX, int touchY, int pointer, int button) {
-        if (runningMode || state != GameState.START) return false;
+        if (runningMode) return false;
         Node node = findNodeFromTouch(touchX, touchY);
         if (node == null)
             return false;
@@ -505,10 +505,10 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
             } else if (node == goalNode) {
                 setGoalMode = true;
             } else {
-                if (node.state == Node.NodeState.DEFAULT) {
+                if (node.state != Node.NodeState.BLOCKED) {
                     node.state = Node.NodeState.BLOCKED;
                     addBlockedMode = true;
-                } else if (node.state == Node.NodeState.BLOCKED) {
+                } else {
                     node.state = Node.NodeState.DEFAULT;
                     removeBlockedMode = true;
                 }
@@ -523,23 +523,21 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
     public boolean touchDragged(int touchX, int touchY, int pointer) {
         if (runningMode) return false;
         Node node = findNodeFromTouch(touchX, touchY);
-        if (node != null) {
-            if (addBlockedMode && (node != startNode && node != goalNode) && node.state == Node.NodeState.DEFAULT) {
+        if (node == null)
+            return false;
+
+        if (node.state != Node.NodeState.BLOCKED) {
+            if (setStartMode) {
+                startNode = node;
+            } else if (setGoalMode) {
+                goalNode = node;
+            } else if (addBlockedMode && node != startNode && node != goalNode) {
                 node.state = Node.NodeState.BLOCKED;
                 map.updateNearbyNode();
             }
-
-            if (removeBlockedMode && node.state == Node.NodeState.BLOCKED) {
-                node.state = Node.NodeState.DEFAULT;
-                map.updateNearbyNode();
-            }
-
-            if (setStartMode && node != goalNode && node.state != Node.NodeState.BLOCKED)
-                startNode = node;
-
-            if (setGoalMode && node != startNode && node.state != Node.NodeState.BLOCKED)
-                goalNode = node;
-
+        } else if (removeBlockedMode) {
+            node.state = Node.NodeState.DEFAULT;
+            map.updateNearbyNode();
         }
         return false;
     }
@@ -773,6 +771,7 @@ public class MyGdxGame extends InputAdapter implements ApplicationListener {
         currentHeuristicCell.width(functionButtonTable.getWidth());
         window.setPosition(screenWidth / 2, screenHeight / 2, Align.center);
         window.addAction(alpha(0));
+        window.setVisible(false);
         return window;
     }
 

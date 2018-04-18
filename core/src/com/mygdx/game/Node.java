@@ -1,6 +1,7 @@
 package com.mygdx.game;
 
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.g2d.BitmapFontCache;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
@@ -32,6 +33,8 @@ public class Node {
     public boolean showHeuristicCost;
     public boolean showAStarCost;
     public boolean showArrow;
+    private BitmapFontCache cache;
+    private String oldCostText = "";
 
     private final int index;
     private final Array<Node> nearbyNodes;
@@ -62,7 +65,6 @@ public class Node {
     public void draw(PathFinder pathFinder) {
         drawNodeTexture();
         if (searchId == pathFinder.getSearchId()) {
-            drawCost(pathFinder);
             drawArrow(pathFinder);
         }
     }
@@ -91,38 +93,38 @@ public class Node {
             game.batch.draw(game.neighborRegion, x * 34f, y * 34f);
     }
 
-    private void drawCost(PathFinder pathFinder) {
+    public void drawCost(PathFinder pathFinder) {
         String text = "";
 
         if (showCost) {
             text = "" + Math.round(cost);
-        } else if (showCostSoFar) {
+        } else if (searchId == pathFinder.getSearchId()) {
             final PathFinder.NodeRecord nodeRecord = pathFinder.getNodeRecords()[index];
             if (nodeRecord != null) {
-                int costSoFar = Math.round(nodeRecord.costSoFar);
-
-                text = "" + costSoFar;
-            }
-        } else if (showHeuristicCost) {
-            final PathFinder.NodeRecord nodeRecord = pathFinder.getNodeRecords()[index];
-            if (nodeRecord != null) {
-                int heuristicCost = Math.round(nodeRecord.getTotalCost() - nodeRecord.costSoFar);
-                text = "" + heuristicCost;
-            }
-        } else if (showAStarCost) {
-            final PathFinder.NodeRecord nodeRecord = pathFinder.getNodeRecords()[index];
-            if (nodeRecord != null) {
-                int aStarCost = Math.round(nodeRecord.getTotalCost());
-                text = "" + aStarCost;
+                if (showCostSoFar) {
+                    int costSoFar = Math.round(nodeRecord.costSoFar);
+                    text = "" + costSoFar;
+                } else if (showHeuristicCost) {
+                    int heuristicCost = Math.round(nodeRecord.getTotalCost() - nodeRecord.costSoFar);
+                    text = "" + heuristicCost;
+                } else if (showAStarCost) {
+                    int aStarCost = Math.round(nodeRecord.getTotalCost());
+                    text = "" + aStarCost;
+                }
             }
         }
 
         if (!text.equals("")) {
-            game.font.setColor(Color.BLACK);
-            GlyphLayout layout = game.font.getCache().setText(text, 0, 0);
-            game.font.draw(game.batch, text,
-                    x * 34f + 16f - layout.width * 0.5f,
-                    y * 34f + layout.height * 0.5f + 16f);
+            if (cache == null) {
+                cache = game.font.newFontCache();
+                cache.setColor(Color.BLACK);
+            }
+            if (!text.equals(oldCostText)) {
+                GlyphLayout layout = cache.setText(text, x * 34f + 16f, y * 34f + 16f);
+                cache.setPosition(-layout.width * 0.5f, layout.height * 0.5f);
+                oldCostText = text;
+            }
+            cache.draw(game.batch);
         }
     }
 
